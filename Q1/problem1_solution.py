@@ -4,6 +4,11 @@
 本脚本只依据正式题面要求和实际附件字段建模，不采用附件中以小字出现的
 预置方法、预置参数或预置结论。默认读取 A1--A16，其中 A1--A3 使用全部记录。
 
+可在编辑器中直接运行：默认从脚本上一级的 real_attachments/A_data_value
+读取数据，结果保存到脚本同级 problem1_outputs 下以运行时间命名的新目录。
+也可通过 --data-root 和 --output-dir 手动指定目录。
+Windows 下直接运行时会检查当前 Python 的计算库，依赖齐全即可直接运行。
+
 主要输出：
   quality_record_scores.csv.gz        全量文本质量、冲突与置信度
   quality_domain_summary.csv          分来源、分领域质量汇总
@@ -22,13 +27,45 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import lzma
 import math
+import sys
 import warnings
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
+from time import perf_counter
 from typing import Iterable, Sequence
+
+
+def ensure_modeling_environment() -> None:
+    """在导入计算库前检查当前解释器；不再依赖硬编码的 Conda 路径。"""
+    required = [name for name in ("numpy", "pandas")
+                if importlib.util.find_spec(name) is None]
+    plotting_available = (
+        importlib.util.find_spec("matplotlib") is not None
+        or importlib.util.find_spec("PIL") is not None
+        or "--no-plots" in sys.argv
+    )
+    if not plotting_available:
+        required.append("matplotlib 或 pillow")
+    if required:
+        packages = "、".join(required)
+        raise SystemExit(
+            f"当前 Python 缺少依赖：{packages}\n"
+            f"解释器：{sys.executable}\n"
+            "请在 PowerShell 中执行：\n"
+            f'"{sys.executable}" -m pip install numpy pandas matplotlib pillow'
+        )
+
+
+if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+    # ensure_modeling_environment()
 
 import numpy as np
 import pandas as pd
@@ -205,14 +242,22 @@ DIRECTION = {
 
 
 def parse_args() -> argparse.Namespace:
+    script_dir = Path(__file__).resolve().parent
+    default_data_root = script_dir.parent / "real_attachments" / "A_data_value"
+    default_output_dir = script_dir / "problem1_outputs" / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     parser = argparse.ArgumentParser(description="F 题问题一：质量评价、冲突消解和配比建模")
     parser.add_argument(
         "--data-root",
         type=Path,
-        required=True,
-        help="A_data_value 目录，例如 D:/.../real_attachments/A_data_value",
+        default=default_data_root,
+        help="A_data_value 目录，默认使用脚本上一级的 real_attachments/A_data_value",
     )
-    parser.add_argument("--output-dir", type=Path, default=Path("problem1_outputs"))
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=default_output_dir,
+        help="输出目录，默认保存到脚本同级 problem1_outputs 下以运行时间命名的新目录",
+    )
     parser.add_argument("--seed", type=int, default=20260924)
     parser.add_argument("--critic-blend", type=float, default=0.5,
                         help="CRITIC 权重占比，0 为等权，1 为纯 CRITIC")
@@ -276,6 +321,11 @@ def iter_jsonl_xz(path: Path, limit: int | None = None) -> Iterable[dict]:
                 warnings.warn(f"跳过无法解析的 JSON 行：{path.name}:{i + 1}")
 
 
+def report_progress(message: str) -> None:
+    """及时显示运行进度，并保留标准输出中的 JSON 摘要。"""
+    print(message, file=sys.stderr, flush=True)
+
+
 def load_quality_data(root: Path, limit: int | None) -> pd.DataFrame:
     specs = [
         (root / "slimpajama_quality_signal_sample.jsonl.xz", "sample", None),
@@ -291,6 +341,8 @@ def load_quality_data(root: Path, limit: int | None) -> pd.DataFrame:
 
     columns: dict[str, list] = defaultdict(list)
     for path, dataset, domain_override in specs:
+        report_progress(f"  正在读取：{path.name}")
+        file_records = 0
         for obj in iter_jsonl_xz(path, limit):
             columns["id"].append(str(obj.get("id", "")))
             columns["dataset"].append(dataset)
@@ -299,6 +351,10 @@ def load_quality_data(root: Path, limit: int | None) -> pd.DataFrame:
             columns["domain"].append(domain)
             for field in QUALITY_FIELDS:
                 columns[field].append(scalarize(field, obj.get(field)))
+            file_records += 1
+            if file_records % 10000 == 0:
+                report_progress(f"    已读取 {file_records:,} 条记录")
+        report_progress(f"  读取完成：{file_records:,} 条记录")
     frame = pd.DataFrame(columns)
     if frame.empty:
         raise ValueError("质量数据为空")
@@ -1039,24 +1095,75 @@ def make_plots_pillow(
     image.save(fig_dir / "problem1_workflow.png", dpi=(220, 220))
 
 
+def export_problem2_inputs(root: Path, out: Path, model: QuadraticRidgeModel,
+                           selected: pd.DataFrame, projection: pd.DataFrame,
+                           pseudocount: float) -> None:
+    """导出问题二接口；A 原始文件只在问题一阶段读取，问题二只消费这些输出。"""
+    specifications = [
+        ("train_1m", "train_mixture_1m.csv", "train_pile_loss_1m.csv", 0.001, "observed"),
+        ("test_1m", "test_mixture_1m.csv", "test_pile_loss_1m.csv", 0.001, "observed"),
+        ("test_60m", "test_mixture_60m.csv", "test_pile_loss_60m.csv", 0.06, "observed"),
+        ("test_1B", "test_mixture_1B.csv", "test_pile_loss_1B.csv", 1.0, "observed"),
+        ("est_10b", "est_mixture_10b.csv", "est_pile_loss_10b.csv", 10.0, "estimated_subset"),
+        ("est_70b", "est_mixture_70b.csv", "est_pile_loss_70b.csv", 70.0, "estimated_subset"),
+    ]
+    frames = []
+    for label, mix_file, loss_file, size, kind in specifications:
+        joined, p, y, mix_cols, loss_cols = load_pair(root / "regmix_tables", mix_file, loss_file)
+        frame = joined[["index", *mix_cols]].copy()
+        frame.insert(0, "dataset", label)
+        frame["N_params_B"] = size
+        frame["evidence_type"] = kind
+        frame["observed_mean_loss"] = y.mean(axis=1)
+        frame["predicted_mean_loss_1m"] = model.predict(ilr_transform(p, pseudocount)).mean(axis=1)
+        quality = quality_projection(label, joined["index"].to_numpy(), p, mix_cols,
+                                     selected, root / "domain_mapping_guide.csv")
+        frames.append(frame.merge(quality, on=["dataset", "index"], validate="one_to_one"))
+    pd.concat(frames, ignore_index=True).to_csv(out / "problem2_mixture_samples.csv", index=False)
+    np.savez_compressed(out / "problem2_mixture_model.npz", alpha=model.alpha,
+                        x_mean=model.x_mean, x_std=model.x_std,
+                        y_mean=model.y_mean, coef=model.coef)
+    mapping = pd.read_csv(root / "domain_mapping_guide.csv")
+    quality_map = selected.set_index("domain")["Q"].to_dict()
+    metadata = {
+        "schema_version": 1, "pseudocount": pseudocount,
+        "mixture_columns": mix_cols, "loss_columns": loss_cols,
+        "domain_quality": quality_map,
+        "global_quality": float(np.average(selected.Q, weights=selected.n)),
+        "mapping": mapping.where(pd.notna(mapping), None).to_dict(orient="records"),
+        "note": "Training token counts for RegMix are unavailable here; do not invent D or pool absolute A/B losses."
+    }
+    (out / "problem2_interface.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def write_outputs(args: argparse.Namespace) -> None:
+    started = perf_counter()
     root = args.data_root.resolve()
     out = args.output_dir.resolve()
     out.mkdir(parents=True, exist_ok=True)
     np.random.seed(args.seed)
 
+    report_progress(f"Python 环境：{sys.executable}")
+    report_progress(f"数据目录：{root}")
+    report_progress(f"输出目录：{out}")
+    report_progress("[1/6] 读取质量数据；全量读取需要一些时间，请等待进度更新。")
     raw = load_quality_data(root, args.max_records_per_file)
+    report_progress(f"[2/6] 计算 {len(raw):,} 条记录的质量得分与冲突指标。")
     record, diagnostics, contributions, _ = score_quality(
         raw,
         critic_blend=args.critic_blend,
         conflict_quantile=args.conflict_quantile,
         conflict_spread=args.conflict_spread,
     )
+    report_progress("[3/6] 汇总领域质量。")
     summary, comparison, selected = summarize_quality(record)
+    report_progress("[4/6] 拟合配比模型并计算验证指标。")
     validation, effects, interactions, extrapolation, projection, model = fit_mixture_model(
         root, selected, pseudocount=args.pseudocount, delta=args.effect_delta
     )
 
+    report_progress("[5/6] 保存计算结果。")
     record.to_csv(out / "quality_record_scores.csv.gz", index=False, compression="gzip")
     summary.to_csv(out / "quality_domain_summary.csv", index=False)
     comparison.to_csv(out / "quality_extension_comparison.csv", index=False)
@@ -1068,6 +1175,7 @@ def write_outputs(args: argparse.Namespace) -> None:
     interactions.to_csv(out / "mixture_interactions.csv", index=False)
     extrapolation.to_csv(out / "extrapolation_stability.csv", index=False)
     projection.to_csv(out / "mixture_quality_projection.csv", index=False)
+    export_problem2_inputs(root, out, model, selected, projection, args.pseudocount)
 
     summary_json = {
         "formal_run": args.max_records_per_file is None,
@@ -1091,11 +1199,15 @@ def write_outputs(args: argparse.Namespace) -> None:
         json.dumps(summary_json, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     if not args.no_plots:
+        report_progress("[6/6] 生成图表。")
         make_plots(
             out, selected, summary, effects, comparison,
             contributions, validation, interactions,
         )
+    else:
+        report_progress("[6/6] 已按参数设置跳过绘图。")
 
+    report_progress(f"运行完成，用时 {perf_counter() - started:.1f} 秒。结果目录：{out}")
     print(json.dumps(summary_json, ensure_ascii=False, indent=2))
 
 
