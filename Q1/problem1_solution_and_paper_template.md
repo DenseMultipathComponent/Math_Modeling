@@ -47,7 +47,7 @@ A16 只有 6 个可直接或近直接映射的领域。对未映射份额不强�
 
 ```powershell
 python problem1_solution.py `
-  --data-root "D:/gladiators/Desktop/F/real_attachments/A_data_value" `
+  --data-root "D:/.../real_attachments/A_data_value" `
   --output-dir "problem1_outputs"
 ```
 
@@ -55,7 +55,7 @@ python problem1_solution.py `
 
 ```powershell
 python problem1_solution.py `
-  --data-root "D:/gladiators/Desktop/F/real_attachments/A_data_value" `
+  --data-root "D:/.../real_attachments/A_data_value" `
   --output-dir "problem1_smoke" `
   --max-records-per-file 2000 `
   --no-plots
