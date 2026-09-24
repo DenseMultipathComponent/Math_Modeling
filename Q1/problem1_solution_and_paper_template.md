@@ -43,22 +43,12 @@ A16 只有 6 个可直接或近直接映射的领域。对未映射份额不强�
 
 依赖：Python 3.10 及以上、`numpy`、`pandas`。`matplotlib` 仅用于绘图，未安装时可加 `--no-plots`；核心计算不依赖 SciPy 或 scikit-learn。
 
-正式全量运行：
+全量运行：
 
 ```powershell
-python problem1_solution.py `
-  --data-root "D:/.../real_attachments/A_data_value" `
-  --output-dir "problem1_outputs"
-```
+cd "D:\...\F\Q1"
 
-快速检查代码是否能执行：
-
-```powershell
-python problem1_solution.py `
-  --data-root "D:/.../real_attachments/A_data_value" `
-  --output-dir "problem1_smoke" `
-  --max-records-per-file 2000 `
-  --no-plots
+& "D:\ProgramData\Anaconda3\python.exe" .\problem1_solution.py
 ```
 
 带 `--max-records-per-file` 的结果只能用于调试，不能写入正式论文。
