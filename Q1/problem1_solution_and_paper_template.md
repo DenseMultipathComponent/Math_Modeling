@@ -46,9 +46,7 @@ A16 只有 6 个可直接或近直接映射的领域。对未映射份额不强�
 全量运行：
 
 ```powershell
-cd "D:\...\F\Q1"
-
-& "D:\ProgramData\Anaconda3\python.exe" .\problem1_solution.py
+python Problem1/problem1_solution.py
 ```
 
 带 `--max-records-per-file` 的结果只能用于调试，不能写入正式论文。
