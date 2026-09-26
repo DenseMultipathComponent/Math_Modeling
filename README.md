@@ -135,19 +135,3 @@
     ```
     BBH子任务 ————> 宏平均和样本数加权平均
     ```
-
-<font color=red>添加正文引用公式，图表快捷链接</font> <br>
-
-<font color=red>图片文字大小与正文一致</font> <br>
-
-<font color=red>问题一：缺少对应于 13 Loss 的岭回归曲线</font> <br>
-
-<font color=red>问题二：η 与 Q3 重复使用，G 与 Q4 重复使用</font> <br>
-
-<font color=red>问题三：缺少固定总算力预算，补充上下文长度对不同成本模型和Loss的影响</font> <br>
-
-<font color=red>问题三：可补充候选配比对不同成本模型和Loss的影响</font> <br>
-
-<font color=red>问题四：图3应该包括0，12，24月，尽量区分3条曲线</font> <br>
-
-<font color=red>问题四：缺少C8数据集上逐任务聚合分析</font> <br>
