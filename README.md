@@ -87,8 +87,6 @@
 1. #Q4 ***技术演进分析与前沿预测***
 问题四用历史评测数据检验规律并预测能力前沿
 
-<font color=red>问题一代码生成矢量图(.pdf)写论文</font>
-
 <font color=red>缺少对应于 13 Loss 的岭回归曲线</font>
 
-<font color=red>改参考文献格式(.bib)</font>
+<font color=red>添加正文引用公式，图表快捷链接</font>
