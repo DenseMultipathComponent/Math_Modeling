@@ -611,7 +611,7 @@ def make_plots(out: Path, budget_path: pd.DataFrame, context_sensitivity: pd.Dat
     axes[-1].legend(loc="best")
     fig.suptitle(f"固定参考配比下的资源份额路径（上下文长度 {chosen_context:g}）")
     fig.tight_layout()
-    fig.savefig(fig_dir / "resource_allocation_shares.png", dpi=220)
+    fig.savefig(fig_dir / "q3_fig01_resource_allocation_shares.pdf", bbox_inches="tight")
     plt.close(fig)
 
     fig, axes = plt.subplots(1, 3, figsize=(14, 4.5))
@@ -631,7 +631,7 @@ def make_plots(out: Path, budget_path: pd.DataFrame, context_sensitivity: pd.Dat
     axes[2].legend(loc="best")
     fig.suptitle(f"最优参数量、数据量与质量路径（上下文长度 {chosen_context:g}）")
     fig.tight_layout()
-    fig.savefig(fig_dir / "optimal_N_D_Q_paths.png", dpi=220)
+    fig.savefig(fig_dir / "q3_fig02_optimal_N_D_Q_paths.pdf", bbox_inches="tight")
     plt.close(fig)
 
     if not context_sensitivity.empty:
@@ -651,7 +651,7 @@ def make_plots(out: Path, budget_path: pd.DataFrame, context_sensitivity: pd.Dat
         ax1.legend(loc="best")
         ax1.set_title(f"上下文长度对最优预测 Loss 的影响（C={budget:.0e}）")
         fig.tight_layout()
-        fig.savefig(fig_dir / "context_length_sensitivity.png", dpi=220)
+        fig.savefig(fig_dir / "q3_fig03_context_length_sensitivity.pdf", bbox_inches="tight")
         plt.close(fig)
 
 

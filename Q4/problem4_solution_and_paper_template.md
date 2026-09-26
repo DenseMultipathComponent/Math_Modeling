@@ -52,10 +52,10 @@ python problem4_solution.py \
 ### 3.2 如果使用自己最新的 Q2 输出和 Q3 代码
 
 ```bash
-python problem4_solution.py \
-  --data-root "/你的路径/real_attachments/C_efficiency_evolution" \
-  --problem2-output "/你的路径/Q2的实际输出文件夹" \
-  --problem3-code "/你的路径/Q3/problem3_solution.py" \
+python Q4/problem4_solution.py `
+  --data-root real_attachments/C_efficiency_evolution `
+  --problem2-output Q2/problem2_outputs/xxxxxxxx_xxxxxx_xxxxxx `
+  --problem3-code Q3/problem3_solution.py `
   --bootstrap 200
 ```
 

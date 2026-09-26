@@ -17,7 +17,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-
+'''
 def activate_local_environment():
     """仅在本项目已有环境存在时沿用它；不安装依赖、不修改系统环境。"""
     if sys.platform != "win32" or os.environ.get("PROBLEM2_ACTIVE") == "1":
@@ -43,6 +43,7 @@ if __name__ == "__main__":
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     activate_local_environment()
+'''
 
 import numpy as np
 import pandas as pd
@@ -85,13 +86,23 @@ def json_write(path, value):
     path.write_text(json.dumps(clean_json(value), ensure_ascii=False, indent=2, allow_nan=False), encoding="utf-8")
 
 
+def spearman_correlation(x, y):
+    """兼容不同 SciPy 版本的 spearmanr 返回字段。"""
+    result = spearmanr(x, y)
+    if hasattr(result, "statistic"):
+        return float(result.statistic)
+    if hasattr(result, "correlation"):
+        return float(result.correlation)
+    return float(result[0])
+
+
 def metrics(y, pred):
     y, pred = np.asarray(y, float), np.asarray(pred, float)
     if not len(y):
         return {"n": 0, "rmse": np.nan, "mae": np.nan, "r2": np.nan, "spearman": np.nan, "bias": np.nan}
     residual = pred - y
     sst = np.sum((y - y.mean()) ** 2)
-    rho = float(spearmanr(y, pred).statistic) if np.std(y) > 1e-12 and np.std(pred) > 1e-12 else np.nan
+    rho = spearman_correlation(y, pred) if np.std(y) > 1e-12 and np.std(pred) > 1e-12 else np.nan
     return {"n": len(y), "rmse": np.sqrt(np.mean(residual**2)), "mae": np.mean(abs(residual)),
             "r2": 1 - np.sum(residual**2) / sst if sst > 0 else np.nan,
             "spearman": rho, "bias": residual.mean()}
@@ -197,7 +208,7 @@ def fit_quality_free_exponents(frame, theta, qparams, q0):
 class MixtureBridge:
     """复用问题一二次 ILR 岭模型；额外质量项只度量相对本配方常规质量的改进。"""
     def __init__(self, root):
-        spec = importlib.util.spec_from_file_location("problem1_reused", BASE.parent/"Problem1"/"problem1_solution.py")
+        spec = importlib.util.spec_from_file_location("problem1_reused", BASE.parent/"Q1"/"problem1_solution.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         self.ilr = module.ilr_transform
@@ -298,7 +309,7 @@ def quality_direction_audit(data):
             slope = np.dot(q-q.mean(), y-y.mean()) / np.dot(q-q.mean(), q-q.mean())
             rows.append({"source": label, "N_params_B": n, "D_tokens_B": d,
                          "n": len(group), "slope_dL_dQ": slope,
-                         "spearman_Q_L": spearmanr(q, y).statistic,
+                         "spearman_Q_L": spearman_correlation(q, y),
                          "quality_direction_conflict": bool(slope > 0)})
     return pd.DataFrame(rows)
 
@@ -459,8 +470,8 @@ def mixture_analysis(bridge, theta, gamma, out):
         for label, idx in samples.groupby("dataset").groups.items():
             observed = samples.loc[idx, "observed_mean_loss"].to_numpy()
             rows.append({"dataset": label, "lambda": lam, "n": len(idx),
-                         "spearman": float(spearmanr(observed, score[idx]).statistic) if lam else np.nan,
-                         "fixed_Q_spearman": float(spearmanr(observed, fixed_q_score[idx]).statistic),
+                         "spearman": spearman_correlation(observed, score[idx]) if lam else np.nan,
+                         "fixed_Q_spearman": spearman_correlation(observed, fixed_q_score[idx]),
                          "role": "ranking_transfer_only_no_absolute_A_B_loss_pooling"})
     # 所有配方在同一个假设 N=7B,D=300B 情景评估；不把 A 的未知 D 补为该数值。
     for kappa in [.5, 1., 2.]:
@@ -522,7 +533,7 @@ def plot_results(out, data, theta, qparams, bridge, substitution, interactions):
         line, = ax.plot(group.D_tokens_B, classic(theta, *nd(group)), label=f"{n:.3g}B")
         ax.scatter(group.D_tokens_B, group.val_loss, color=line.get_color(), s=9, alpha=.35)
     ax.set(xscale="log", xlabel="训练数据量 D（十亿 tokens）", ylabel="验证 Loss", title="B1 真实轨迹与经典标度律拟合")
-    ax.legend(ncol=4, fontsize=9); fig.tight_layout(); fig.savefig(figdir/"B1_scaling_fit.png"); plt.close(fig)
+    ax.legend(ncol=4, fontsize=9); fig.tight_layout(); fig.savefig(figdir/"q2_fig01_scaling_fit.pdf",bbox_inches="tight"); plt.close(fig)
     fig, axes = plt.subplots(1,2,figsize=(12,5))
     for ax, label in zip(axes,["B6","B8"]):
         df = data[label]
@@ -532,13 +543,13 @@ def plot_results(out, data, theta, qparams, bridge, substitution, interactions):
             if len(g)>1:
                 ax.plot(g.Q_score, g.val_loss-g.val_loss.mean(), color="#237a91" if label=="B6" else "#c46744",alpha=.15)
         ax.set(xlabel="质量 Q", ylabel="组内中心化 Loss", title=f"{label} 半合成数据的质量方向")
-    fig.tight_layout(); fig.savefig(figdir/"quality_direction_conflict.png"); plt.close(fig)
+    fig.tight_layout(); fig.savefig(figdir/"q2_fig02_quality_direction_conflict.pdf",bbox_inches="tight"); plt.close(fig)
     fig,ax=plt.subplots(figsize=(9,5.5))
     for tokens, group in substitution.groupby("D_tokens_B"):
         finite=group[group.status=="finite"]
         ax.plot(finite.N_params_B, finite.N_multiplier, marker="o",label=f"D={tokens:g}B")
     ax.set(xscale="log",yscale="log",xlabel="原参数量 N（十亿）",ylabel="等效参数倍数",title="质量提高 0.1 的等效扩容（固定 D 与配比）")
-    ax.legend(); fig.tight_layout(); fig.savefig(figdir/"quality_parameter_equivalence.png"); plt.close(fig)
+    ax.legend(); fig.tight_layout(); fig.savefig(figdir/"q2_fig03_quality_parameter_equivalence.pdf",bbox_inches="tight"); plt.close(fig)
     frame=interactions[interactions["mode"]=="with_Q"]
     mat=np.zeros((len(bridge.names),len(bridge.names)))
     for row in frame.itertuples():
@@ -546,20 +557,23 @@ def plot_results(out, data, theta, qparams, bridge, substitution, interactions):
         mat[j,k]=mat[k,j]=row.mixed_derivative
     bound=max(np.percentile(abs(mat[np.triu_indices(len(mat),1)]),95),1e-9)
     fig,ax=plt.subplots(figsize=(11,9))
-    im=ax.imshow(mat,cmap="RdBu_r",vmin=-bound,vmax=bound)
+    # pcolormesh 在 PDF 中保留每个网格为矢量路径；避免 imshow 嵌入栅格图像。
+    edge=np.arange(len(mat)+1)-.5
+    im=ax.pcolormesh(edge,edge,mat,cmap="RdBu_r",vmin=-bound,vmax=bound,shading="flat")
+    ax.set_xlim(-.5,len(mat)-.5);ax.set_ylim(len(mat)-.5,-.5)
     ax.set_xticks(range(len(mat)),bridge.names,rotation=60,ha="right",fontsize=8)
     ax.set_yticks(range(len(mat)),bridge.names,fontsize=8)
     ax.set_title("参考配比附近的领域混合偏导（常规质量路径）")
-    fig.colorbar(im,ax=ax,label="负值：局部互补；正值：局部替代",shrink=.75,extend="both")
-    fig.text(.5,.005,"颜色在绝对值第 95 百分位处饱和；原始数值见 CSV。",ha="center",fontsize=9)
-    fig.tight_layout(); fig.savefig(figdir/"domain_interactions.png"); plt.close(fig)
+    fig.text(.5,.02,"蓝色（负值）：局部互补；红色（正值）：局部替代；颜色在绝对值第 95 百分位处饱和。",
+             ha="center",fontsize=9)
+    fig.tight_layout(); fig.savefig(figdir/"q2_fig04_domain_interactions.pdf",bbox_inches="tight"); plt.close(fig)
 
 
 def find_problem1_output(explicit):
     if explicit is not None:
         candidates = [explicit]
     else:
-        root = BASE.parent/"Problem1"/"problem1_outputs"
+        root = BASE.parent/"Q1"/"problem1_outputs"
         candidates = sorted(root.glob("*"), key=lambda x: x.stat().st_mtime, reverse=True)
     for p in candidates:
         required = ["analysis_summary.json", "problem2_interface.json", "problem2_mixture_samples.csv", "problem2_mixture_model.npz"]
@@ -567,7 +581,7 @@ def find_problem1_output(explicit):
             if not json.loads((p/"analysis_summary.json").read_text(encoding="utf-8")).get("formal_run"):
                 continue
             return p.resolve()
-    raise FileNotFoundError("缺少问题一全量接口输出。请先运行更新后的 Problem1/problem1_solution.py，再运行问题二。")
+    raise FileNotFoundError("缺少问题一全量接口输出。请先运行更新后的 Q1/problem1_solution.py，再运行问题二。")
 
 
 def parse_args():
@@ -593,7 +607,7 @@ def main(args):
     for name in ["analysis_summary.json","problem2_interface.json","problem2_mixture_samples.csv","problem2_mixture_model.npz"]:
         file=p1/name
         manifest.append({"label":"Problem1_output","file":str(file),"sha256":hashlib.sha256(file.read_bytes()).hexdigest()})
-    for file in [Path(__file__),BASE.parent/"Problem1"/"problem1_solution.py"]:
+    for file in [Path(__file__),BASE.parent/"Q1"/"problem1_solution.py"]:
         manifest.append({"label":"code","file":str(file.resolve()),"sha256":hashlib.sha256(file.read_bytes()).hexdigest()})
     json_write(out/"input_manifest.json",manifest)
     audit=quality_direction_audit(data); save_csv(audit,out/"quality_direction_audit.csv")

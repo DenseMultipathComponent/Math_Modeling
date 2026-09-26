@@ -369,11 +369,11 @@ def plots(out,lb,b,bm,fore,cutoff):
     fig,ax=plt.subplots(figsize=(8,4.5));x=np.linspace(b.Val_Loss.min(),b.Val_Loss.max(),150)
     for flag,color in [(True,'#28766f'),(False,'#b6904c')]:
         g=b[b.high==flag];ax.scatter(g.Val_Loss,g[BTASKS].mean(axis=1),s=22,c=color,label='High comparability' if flag else 'Medium comparability',alpha=.65)
-    ax.plot(x,bridge_score(bm,x),c='#343c46',label='High-only reference mapping');ax.set(xlabel='Validation loss (source-dependent)',ylabel='Six-task mean score');ax.legend(fontsize=8);fig.tight_layout();fig.savefig(folder/'loss_benchmark_bridge.png',dpi=180);plt.close(fig)
+    ax.plot(x,bridge_score(bm,x),c='#343c46',label='High-only reference mapping');ax.set(xlabel='Validation loss (source-dependent)',ylabel='Six-task mean score');ax.legend(fontsize=8);fig.tight_layout();fig.savefig(folder/'q4_fig01_loss_benchmark_bridge.pdf',bbox_inches='tight');plt.close(fig)
     fig,ax=plt.subplots(figsize=(8,4.5))
     for typ,g in lb.groupby('kind'):
         trend=g.set_index('date').S.resample('MS').quantile(.95);ax.plot(trend.index,trend.values,'o-',label=typ)
-    ax.set(ylabel='Monthly 95th-percentile score',xlabel='Submission date');ax.legend();fig.autofmt_xdate();fig.tight_layout();fig.savefig(folder/'historical_frontier.png',dpi=180);plt.close(fig)
+    ax.set(ylabel='Monthly 95th-percentile score',xlabel='Submission date');ax.legend();fig.autofmt_xdate();fig.tight_layout();fig.savefig(folder/'q4_fig02_historical_frontier.pdf',bbox_inches='tight');plt.close(fig)
     fig,axes=plt.subplots(1,2,figsize=(10,4),sharey=True)
     for ax,(typ,g) in zip(axes,fore.groupby('kind')):
         g=g[(g.context_length==8192)&(g.cost_model=='exponential')&(g.technology_retention==.5)]
@@ -381,7 +381,7 @@ def plots(out,lb,b,bm,fore,cutoff):
             d=d.sort_values('horizon_months');ax.plot(d.horizon_months,d.prediction,'o-',label=f'Compute +{growth:.0%}/year')
             if 'conditional_lower_95' in d:ax.fill_between(d.horizon_months,d.conditional_lower_95,d.conditional_upper_95,alpha=.12)
         ax.set(title=typ,xlabel='Months after '+str(cutoff.date()),ylabel='Conditional frontier score',ylim=(0,100));ax.legend(fontsize=7)
-    fig.tight_layout();fig.savefig(folder/'frontier_scenarios.png',dpi=180);plt.close(fig)
+    fig.tight_layout();fig.savefig(folder/'q4_fig03_frontier_scenarios.pdf',bbox_inches='tight');plt.close(fig)
 
 if __name__=='__main__':
     try:main(parse_args())

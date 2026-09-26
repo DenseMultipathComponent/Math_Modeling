@@ -21,7 +21,7 @@ Windows 下直接运行时会检查当前 Python 的计算库，依赖齐全即�
   extrapolation_stability.csv          A12--A15 外推稳定性
   mixture_quality_projection.csv       映射质量的部分识别结果
   analysis_summary.json                关键参数和摘要
-  figures/*.png                        论文可用图形
+  figures/*.pdf                        论文可用矢量图
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from pathlib import Path
 from time import perf_counter
 from typing import Iterable, Sequence
 
-
+'''
 def ensure_modeling_environment() -> None:
     """在导入计算库前检查当前解释器；不再依赖硬编码的 Conda 路径。"""
     required = [name for name in ("numpy", "pandas")
@@ -66,6 +66,7 @@ if __name__ == "__main__":
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="backslashreplace")
     # ensure_modeling_environment()
+'''
 
 import numpy as np
 import pandas as pd
@@ -821,10 +822,7 @@ def make_plots(
         _configure_matplotlib_chinese(matplotlib)
         import matplotlib.pyplot as plt
     except Exception:  # pragma: no cover
-        make_plots_pillow(
-            output_dir, selected, summary, effects, comparison,
-            contributions, validation, interactions,
-        )
+        print("[提示] Matplotlib 不可用，无法生成 PDF 矢量图。", file=sys.stderr)
         return
     fig_dir = output_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
@@ -834,7 +832,7 @@ def make_plots(
     ax.barh(q.domain, q.Q, color="#3B6EA8")
     ax.set(xlabel="领域综合质量得分 Q", ylabel="", xlim=(0, 1), title="选定领域的综合质量得分")
     fig.tight_layout()
-    fig.savefig(fig_dir / "quality_domain_scores.png", dpi=220)
+    fig.savefig(fig_dir / "q1_fig02_domain_quality_scores.pdf", bbox_inches="tight")
     plt.close(fig)
 
     c = summary.pivot(index="domain", columns="dataset", values="conflict_rate").fillna(0)
@@ -843,7 +841,7 @@ def make_plots(
     ax.set(ylabel="质量冲突率", xlabel="", title="各领域及数据源的质量冲突率")
     ax.tick_params(axis="x", rotation=35)
     fig.tight_layout()
-    fig.savefig(fig_dir / "quality_conflict_rates.png", dpi=220)
+    fig.savefig(fig_dir / "q1_fig08_quality_conflict_rates.pdf", bbox_inches="tight")
     plt.close(fig)
 
     e = effects.sort_values("mean_macro_loss_derivative")
@@ -854,7 +852,7 @@ def make_plots(
     ax.set(xlabel="领域配比增加 1 单位时的平均 Loss 变化", ylabel="",
            title="各预训练领域对平均 Loss 的局部边际效应")
     fig.tight_layout()
-    fig.savefig(fig_dir / "mixture_domain_effects.png", dpi=220)
+    fig.savefig(fig_dir / "q1_fig06_mixture_domain_effects.pdf", bbox_inches="tight")
     plt.close(fig)
 
     c = contributions.head(10).sort_values("conflict_contribution")
@@ -862,7 +860,7 @@ def make_plots(
     ax.barh(c.metric, c.conflict_contribution, color="#9C6ADE")
     ax.set(xlabel="标准化冲突贡献度", ylabel="", title="质量冲突的主要指标来源")
     fig.tight_layout()
-    fig.savefig(fig_dir / "conflict_metric_contributions.png", dpi=220)
+    fig.savefig(fig_dir / "q1_fig04_conflict_metric_contributions.pdf", bbox_inches="tight")
     plt.close(fig)
 
     fig, ax = plt.subplots(figsize=(7, 4.5))
@@ -870,14 +868,67 @@ def make_plots(
     ax.set(ylabel="目标平均 Spearman 相关系数", xlabel="", ylim=(0, 1),
            title="跨模型规模的配比排序迁移能力")
     fig.tight_layout()
-    fig.savefig(fig_dir / "mixture_validation_spearman.png", dpi=220)
+    fig.savefig(fig_dir / "q1_fig05_mixture_validation_spearman.pdf", bbox_inches="tight")
     plt.close(fig)
 
-    # 另外三幅图由 Pillow 绘制；设为 False 可避免覆盖上面的 Matplotlib 图。
-    make_plots_pillow(
-        output_dir, selected, summary, effects, comparison,
-        contributions, validation, interactions, include_standard=False,
-    )
+    # A1 抽样集与扩展集均值比较。
+    comp = comparison.set_index("domain")[["Q_sample", "Q_extended"]]
+    fig, ax = plt.subplots(figsize=(7.5, 4.5))
+    comp.plot(kind="bar", ax=ax, color=["#3B6EA8", "#C16E70"])
+    ax.set(xlabel="", ylabel="综合质量得分 Q", ylim=(0, 0.8),
+           title="A1 抽样集与扩展集的质量得分对比")
+    ax.legend(["A1 抽样集", "扩展集"])
+    ax.tick_params(axis="x", rotation=0)
+    fig.tight_layout()
+    fig.savefig(fig_dir / "q1_fig03_extension_quality_comparison.pdf", bbox_inches="tight")
+    plt.close(fig)
+
+    # 全部 17 域的二阶组合效应矩阵。
+    domains = sorted(set(interactions.domain_1) | set(interactions.domain_2))
+    matrix = np.zeros((len(domains), len(domains)), float)
+    index = {domain: i for i, domain in enumerate(domains)}
+    for row in interactions.itertuples(index=False):
+        j, k = index[row.domain_1], index[row.domain_2]
+        matrix[j, k] = matrix[k, j] = float(row.second_difference_per_share2)
+    bound = max(float(np.quantile(np.abs(matrix[np.triu_indices(len(domains), 1)]), 0.95)), 1e-9)
+    fig, ax = plt.subplots(figsize=(10, 8))
+    image = ax.imshow(matrix, cmap="RdBu_r", vmin=-bound, vmax=bound)
+    ax.set_xticks(range(len(domains)), domains, rotation=60, ha="right", fontsize=8)
+    ax.set_yticks(range(len(domains)), domains, fontsize=8)
+    ax.set_title("领域配比的两两交互效应")
+    fig.colorbar(image, ax=ax, label="负值：协同；正值：拮抗", shrink=0.8, extend="both")
+    fig.tight_layout()
+    fig.savefig(fig_dir / "q1_fig07_mixture_interaction_heatmap.pdf", bbox_inches="tight")
+    plt.close(fig)
+
+    # 建模流程图使用 Matplotlib 矢量图元绘制，避免位图嵌入 PDF。
+    from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+    fig, ax = plt.subplots(figsize=(12, 6.5))
+    ax.set_xlim(0, 12); ax.set_ylim(0, 6.5); ax.axis("off")
+    boxes = [
+        ("A1--A3 质量信号", "22 项指标数值化\n方向统一与归一化"),
+        ("稳健质量模型", "CRITIC 权重\nHuber 聚合与冲突度"),
+        ("领域质量 Q", "扩展集检验\n领域聚合与映射"),
+        ("A4--A15 配比", "单纯形闭合\nILR 坐标"),
+        ("二次岭回归", "主效应与交互\n共享正则化"),
+        ("验证与输出", "1M 绝对验证\n跨规模排序迁移"),
+    ]
+    positions = [(0.4, 3.8), (4.2, 3.8), (8.0, 3.8), (0.4, 0.8), (4.2, 0.8), (8.0, 0.8)]
+    width, height = 3.2, 1.6
+    for (heading, body), (x, y) in zip(boxes, positions):
+        ax.add_patch(FancyBboxPatch((x, y), width, height, boxstyle="round,pad=0.08",
+                                    facecolor="#EFF5FB", edgecolor="#3B6EA8", linewidth=1.5))
+        ax.text(x + width / 2, y + 1.15, heading, ha="center", va="center", weight="bold")
+        ax.text(x + width / 2, y + 0.55, body, ha="center", va="center", fontsize=10)
+    for start, end in [((3.6, 4.6), (4.2, 4.6)), ((7.4, 4.6), (8.0, 4.6)),
+                       ((3.6, 1.6), (4.2, 1.6)), ((7.4, 1.6), (8.0, 1.6)),
+                       ((9.6, 3.8), (2.0, 2.4))]:
+        ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-|>", mutation_scale=14,
+                                     color="#555555", linewidth=1.4))
+    ax.set_title("问题一建模流程", fontsize=16, pad=8)
+    fig.tight_layout()
+    fig.savefig(fig_dir / "q1_fig01_modeling_workflow.pdf", bbox_inches="tight")
+    plt.close(fig)
 
 
 def _pil_font(size: int, bold: bool = False):
