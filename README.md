@@ -142,6 +142,8 @@
 
 <font color=red>问题一：缺少对应于 13 Loss 的岭回归曲线</font> <br>
 
+<font color=red>问题二：η 与 Q3 重复使用，G 与 Q4 重复使用</font> <br>
+
 <font color=red>问题三：缺少固定总算力预算，补充上下文长度对不同成本模型和Loss的影响</font> <br>
 
 <font color=red>问题三：可补充候选配比对不同成本模型和Loss的影响</font> <br>
